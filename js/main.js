@@ -1,5 +1,5 @@
-import { TILE, MAP_W, MAP_H, T, buildMap, renderStatic, paintTile, solidAt, tileAt, hash, makeFog,
-  drawHuman, drawLantern, drawPale, drawRat, drawLampPost } from './world.js';
+import { TILE, MAP_W, T, buildMap, renderStatic, paintTile, solidAt, tileAt, makeFog, drawLampPost } from './world.js';
+import * as R from './render3d.js';
 import { PLAYER_NAME, INTRO, ITEMS, NOTEBOOK, QUESTS, LAMPS, GLOWS, OBJECTS, NPCS, ENEMIES, DIALOGS, endingText } from './story.js';
 import { startAudio, sfx, setWhisper, toggleAudio, audioEnabled } from './audio.js';
 
@@ -8,10 +8,7 @@ const VIEW_W = 176;
 const $ = (id) => document.getElementById(id);
 
 const canvas = $('game');
-const ctx = canvas.getContext('2d');
-const dark = document.createElement('canvas');
-const dctx = dark.getContext('2d');
-let VIEW_H = 240, vignette = null;
+let VIEW_H = 240;
 
 const map = buildMap();
 const statics = renderStatic(map);
@@ -23,7 +20,8 @@ let running = false, paused = true, dialog = null, pendingEnding = null;
 let time = 0, saveTimer = 0, spawnTimer = 0, barkTimer = 0, oilWarned = false;
 let hurtFlash = 0, currentRegion = '', focus = null;
 const sparks = [];
-const rain = Array.from({ length: 70 }, () => ({ x: Math.random(), y: Math.random(), s: 0.6 + Math.random() * 0.6 }));
+let quality = 0.5;           // Renderauflösung: grobe Pixel wie 2004 und schnell auf dem Handy
+try { quality = parseFloat(localStorage.getItem('letzteslicht.gfx')) || 0.5; } catch (e) { /* egal */ }
 
 // ------------------------------------------------------------ Zustand
 
@@ -51,7 +49,8 @@ function loadSaved() {
 
 function initWorld(state) {
   S = state;
-  player = { x: S.player.x, y: S.player.y, dir: 'down', fx: 0, fy: 1, phase: 0, atkCd: 0, atkT: 0, moving: false };
+  player = { x: S.player.x, y: S.player.y, dir: 'down', fx: 0, fy: 1, phase: 0, atkCd: 0, atkT: 0, moving: false,
+    look: { skin: '#c9a487', cloak: '#46382a', hair: '#3a2a1c', belt: '#2a2016' } };
   npcs = NPCS.map((n) => ({ ...n, px: n.x * TILE + 8, py: n.y * TILE + 12, dir: 'down', hidden: false }));
   const amb = npcs.find((n) => n.id === 'ambros');
   if (S.flags.ambros_saved) { amb.px = 31 * TILE + 8; amb.py = 43 * TILE + 10; amb.look = { ...amb.look, skin: '#c9a487' }; }
@@ -128,146 +127,26 @@ const g = {
 function resize() {
   const v = $('view');
   const w = v.clientWidth || 1, h = v.clientHeight || 1;
-  VIEW_H = Math.max(120, Math.round(VIEW_W * h / w));
-  canvas.width = dark.width = VIEW_W;
-  canvas.height = dark.height = VIEW_H;
-  ctx.imageSmoothingEnabled = false;
-  vignette = document.createElement('canvas');
-  vignette.width = VIEW_W; vignette.height = VIEW_H;
-  const vc = vignette.getContext('2d');
-  const gr = vc.createRadialGradient(VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.25, VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.75);
-  gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,.75)');
-  vc.fillStyle = gr; vc.fillRect(0, 0, VIEW_W, VIEW_H);
+  VIEW_H = Math.round(VIEW_W * h / w);
+  R.resize(w, h, quality);
 }
 
-function camera() {
-  let cx = Math.round(player.x - VIEW_W / 2), cy = Math.round(player.y - 8 - VIEW_H / 2);
-  cx = Math.max(0, Math.min(MAP_W * TILE - VIEW_W, cx));
-  cy = Math.max(0, Math.min(MAP_H * TILE - VIEW_H, cy));
-  return { cx, cy };
-}
-
+// Lichtquellen in Pixeln; h = Höhe in Einheiten, i = Stärke, r = Reichweite in Einheiten
 function lights() {
   const L = [];
-  const p = S.player;
-  const fl = 1 + Math.sin(time * 9) * 0.03 + Math.sin(time * 23) * 0.02;
-  L.push({ x: player.x, y: player.y - 8, r: (p.oil > 0 ? 58 + Math.min(10, p.oil / 10) : 16) * fl, c: [255, 170, 80], a: p.oil > 0 ? 0.22 : 0.05 });
   for (const l of lamps) if (l.lit) {
-    const f = l.sick ? 0.75 + Math.sin(time * 17 + l.x) * 0.15 : 1 + Math.sin(time * 7 + l.x) * 0.03;
-    L.push({ x: l.px, y: l.py - 24, r: 72 * f, c: [255, 180, 90], a: 0.2 });
+    const f = l.sick ? 0.6 + Math.sin(time * 17 + l.x) * 0.25 : 1 + Math.sin(time * 7 + l.x) * 0.04;
+    L.push({ x: l.px, y: l.py - 4, h: 2.1, r: 10, i: 6 * f, c: [255, 180, 90] });
   }
-  for (const gl of GLOWS) L.push({ x: gl.x * TILE + 8, y: gl.y * TILE + 8, r: gl.r * (1 + Math.sin(time * 5 + gl.x) * 0.04), c: gl.c, a: 0.18 });
-  if (S.flags.ending_kind === 'pure') L.push({ x: 48 * TILE, y: 9 * TILE, r: 170, c: [255, 220, 150], a: 0.25 });
-  else if (S.flags.ending_kind === 'sick') L.push({ x: 48 * TILE, y: 9 * TILE, r: 90 + Math.sin(time * 11) * 15, c: [200, 200, 170], a: 0.15 });
+  for (const gl of GLOWS) L.push({ x: gl.x * TILE + 8, y: gl.y * TILE + 8, h: 1.4, r: gl.r / 8, i: 4 * (1 + Math.sin(time * 5 + gl.x) * 0.06), c: gl.c });
+  if (S.flags.ending_kind === 'pure') L.push({ x: 48 * TILE, y: 10.5 * TILE, h: 16, r: 40, i: 30, c: [255, 220, 150] });
+  else if (S.flags.ending_kind === 'sick') L.push({ x: 48 * TILE, y: 10.5 * TILE, h: 16, r: 26, i: 12 + Math.sin(time * 11) * 4, c: [210, 210, 180] });
   return L;
 }
 
 function render() {
-  const { cx, cy } = camera();
-  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-  ctx.drawImage(statics.ground, cx, cy, VIEW_W, VIEW_H, 0, 0, VIEW_W, VIEW_H);
-
-  // Wasser glitzert
-  const tx0 = Math.floor(cx / TILE), ty0 = Math.floor(cy / TILE);
-  const step = Math.floor(time * 2);
-  for (let ty = ty0; ty <= ty0 + Math.ceil(VIEW_H / TILE); ty++) for (let tx = tx0; tx <= tx0 + 12; tx++) {
-    if (tileAt(map, tx, ty) !== T.WATER) continue;
-    if (hash(tx, ty, step) < 0.35) {
-      ctx.fillStyle = '#1c2a31';
-      ctx.fillRect(tx * TILE - cx + ((hash(tx, ty, step + 1) * 13) | 0), ty * TILE - cy + ((hash(tx, ty, step + 2) * 15) | 0), 3, 1);
-    }
-  }
-
-  // Figuren nach Tiefe sortiert
-  const list = [];
-  for (const l of lamps) list.push({ y: l.py, draw: () => drawLampPost(ctx, l.px - cx, l.py - cy, l.lit, time, l.sick) });
-  for (const n of npcs) if (!n.hidden) list.push({ y: n.py, draw: () => drawHuman(ctx, n.px - cx, n.py - cy, n.look, n.dir, n.walk || 0, n.fading ?? 1) });
-  for (const e of enemies) list.push({ y: e.y, draw: () => {
-    if (e.hurtT > 0 && Math.floor(time * 30) % 2) return;
-    if (e.type === 'pale') drawPale(ctx, e.x - cx, e.y - cy, time, e.spawnA ?? 1);
-    else drawRat(ctx, e.x - cx, e.y - cy, time, e.dir);
-  } });
-  list.push({ y: player.y, draw: () => {
-    drawHuman(ctx, player.x - cx, player.y - cy, { skin: '#c9a487', cloak: '#46382a', hair: '#3a2a1c', belt: '#2a2016' }, player.dir, player.phase);
-    drawLantern(ctx, player.x - cx, player.y - cy, player.dir, S.player.oil > 0, time);
-    if (player.atkT > 0) {
-      const a = Math.atan2(player.fy, player.fx), k = 1 - player.atkT / 0.15;
-      ctx.strokeStyle = 'rgba(220,210,190,.8)'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.arc(player.x - cx, player.y - 7 - cy, 13, a - 1 + k * 0.6, a + 0.2 + k * 0.8); ctx.stroke();
-    }
-  } });
-  list.sort((a, b) => a.y - b.y).forEach((d) => d.draw());
-
-  ctx.drawImage(statics.over, cx, cy, VIEW_W, VIEW_H, 0, 0, VIEW_W, VIEW_H);
-
-  for (const s of sparks) { ctx.fillStyle = s.c; ctx.fillRect(Math.round(s.x - cx), Math.round(s.y - cy), 1, 1); }
-
-  const indoor = tileAt(map, Math.floor(player.x / TILE), Math.floor(player.y / TILE)) === T.FLOOR;
-
-  // Nebel, der im Licht sichtbar wird
-  if (!indoor) drawFog(fogA, cx * 1.0 + time * 6, cy + time * 2, 0.55);
-
-  // Dunkelheit
-  const L = lights();
-  dctx.globalCompositeOperation = 'source-over';
-  dctx.clearRect(0, 0, VIEW_W, VIEW_H);
-  dctx.fillStyle = indoor ? 'rgba(4,4,7,.9)' : 'rgba(3,4,9,.94)';
-  dctx.fillRect(0, 0, VIEW_W, VIEW_H);
-  dctx.globalCompositeOperation = 'destination-out';
-  for (const l of L) {
-    const x = l.x - cx, y = l.y - cy;
-    if (x < -l.r || y < -l.r || x > VIEW_W + l.r || y > VIEW_H + l.r) continue;
-    const gr = dctx.createRadialGradient(x, y, 0, x, y, l.r);
-    gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(0.45, 'rgba(0,0,0,.8)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
-    dctx.fillStyle = gr; dctx.fillRect(x - l.r, y - l.r, l.r * 2, l.r * 2);
-  }
-  ctx.drawImage(dark, 0, 0);
-
-  // Warmes Leuchten
-  ctx.globalCompositeOperation = 'lighter';
-  for (const l of L) {
-    const x = l.x - cx, y = l.y - cy;
-    if (x < -l.r || y < -l.r || x > VIEW_W + l.r || y > VIEW_H + l.r) continue;
-    const gr = ctx.createRadialGradient(x, y, 0, x, y, l.r * 0.8);
-    gr.addColorStop(0, `rgba(${l.c[0]},${l.c[1]},${l.c[2]},${l.a})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = gr; ctx.fillRect(x - l.r, y - l.r, l.r * 2, l.r * 2);
-  }
-  ctx.globalCompositeOperation = 'source-over';
-
-  // Fahle leuchten schwach im Dunkeln
-  for (const e of enemies) if (e.type === 'pale') {
-    const x = e.x - cx, y = e.y - 10 - cy;
-    const gr = ctx.createRadialGradient(x, y, 0, x, y, 14);
-    gr.addColorStop(0, 'rgba(180,200,210,.18)'); gr.addColorStop(1, 'rgba(180,200,210,0)');
-    ctx.fillStyle = gr; ctx.fillRect(x - 14, y - 14, 28, 28);
-    ctx.globalAlpha = 0.35; ctx.fillStyle = '#d8e4ea';
-    ctx.fillRect(Math.round(x - 2), Math.round(y - 5), 1, 1); ctx.fillRect(Math.round(x + 1), Math.round(y - 5), 1, 1);
-    ctx.globalAlpha = 1;
-  }
-
-  if (!indoor) {
-    drawFog(fogB, cx * 1.3 - time * 4, cy * 1.3, 0.13);
-    ctx.fillStyle = 'rgba(150,165,175,.18)';
-    for (const r of rain) {
-      const x = ((r.x * VIEW_W - cx * 0.2 + time * 18 * r.s) % VIEW_W + VIEW_W) % VIEW_W;
-      const y = ((r.y * VIEW_H + time * 140 * r.s) % VIEW_H + VIEW_H) % VIEW_H;
-      ctx.fillRect(Math.round(x), Math.round(y), 1, 3);
-    }
-  }
-
-  ctx.drawImage(vignette, 0, 0);
-  if (hurtFlash > 0) { ctx.fillStyle = `rgba(120,10,5,${hurtFlash * 0.5})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
-  if (S.player.oil <= 0) { ctx.fillStyle = `rgba(0,0,0,${0.15 + Math.sin(time * 2) * 0.05})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
-
-  positionBarks(cx, cy);
-}
-
-function drawFog(img, ox, oy, alpha) {
-  const w = img.width;
-  ctx.globalAlpha = alpha;
-  const sx = ((ox % w) + w) % w, sy = ((oy % w) + w) % w;
-  for (let y = -sy; y < VIEW_H; y += w) for (let x = -sx; x < VIEW_W; x += w) ctx.drawImage(img, Math.round(x), Math.round(y));
-  ctx.globalAlpha = 1;
+  R.render({ player, S, npcs, enemies, lamps, lights: lights(), sparks, time, dt: frameDt, hurtFlash });
+  positionBarks();
 }
 
 // ------------------------------------------------------------ Bewegung & Kollision
@@ -343,10 +222,15 @@ function update(dt) {
   if (k.has('d') || k.has('arrowright')) mx = 1;
   if (k.has('w') || k.has('arrowup')) my = -1;
   if (k.has('s') || k.has('arrowdown')) my = 1;
+  // Eingabe relativ zur Kamera: oben = von der Kamera weg
+  const fwd = -my, side = mx, yaw = R.view.yaw;
+  mx = -Math.sin(yaw) * fwd + Math.cos(yaw) * side;
+  my = -Math.cos(yaw) * fwd - Math.sin(yaw) * side;
   const len = Math.hypot(mx, my);
   player.moving = len > 0.05;
   if (player.moving) {
     if (len > 1) { mx /= len; my /= len; }
+    if (fwd > 0.6 && Math.abs(side) < 0.4 && !camDrag) R.view.yaw += angleDiff(Math.atan2(-mx, -my), yaw) * Math.min(1, dt * 1.5);
     const sp = 52 * dt;
     move(player, mx * sp, my * sp);
     player.fx = mx / Math.max(len, 1e-3); player.fy = my / Math.max(len, 1e-3);
@@ -379,7 +263,7 @@ function update(dt) {
   updateEnemies(dt);
 
   for (let i = sparks.length - 1; i >= 0; i--) {
-    const s = sparks[i]; s.x += s.vx * dt; s.y += s.vy * dt; s.vy += 40 * dt; s.t -= dt;
+    const s = sparks[i]; s.x += s.vx * dt; s.y += s.vy * dt; s.h += s.vh * dt; s.vh -= 6 * dt; s.t -= dt;
     if (s.t <= 0) sparks.splice(i, 1);
   }
   hurtFlash = Math.max(0, hurtFlash - dt * 2);
@@ -437,7 +321,7 @@ function updateEnemies(dt) {
         e.hp -= 10 * dt;
         const ax = e.x - l.px, ay = e.y - l.py, ad = Math.hypot(ax, ay) || 1;
         move(e, (ax / ad) * 40 * dt, (ay / ad) * 40 * dt, 3);
-        if (Math.random() < 0.3) spark(e.x, e.y - 8, '#cfd8dc');
+        if (Math.random() < 0.3) spark(e.x, e.y, '#cfd8dc', 1, 1.2);
         if (e.hp <= 0) killEnemy(e, false);
         continue;
       }
@@ -478,13 +362,16 @@ function updateEnemies(dt) {
 
 function hurtPlayer(n) {
   const p = S.player;
-  if (Math.random() < p.dex * 0.015) { spark(player.x, player.y - 10, '#ffffff'); return; } // ausgewichen
+  if (Math.random() < p.dex * 0.015) { spark(player.x, player.y, '#ffffff', 4, 1.2); return; } // ausgewichen
   p.hp -= n; hurtFlash = 1; sfx.hurt();
   if (p.hp <= 0) { p.hp = 0; die(); }
 }
 
-function spark(x, y, c, n = 1) {
-  for (let i = 0; i < n; i++) sparks.push({ x, y, vx: (Math.random() - 0.5) * 60, vy: -Math.random() * 50, t: 0.4 + Math.random() * 0.3, c });
+// Funken: x/y in Pixeln, h = Höhe in Einheiten
+function spark(x, y, c, n = 1, h = 1) {
+  for (let i = 0; i < n && sparks.length < 300; i++) {
+    sparks.push({ x, y, h, vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40, vh: 1 + Math.random() * 2, t: 0.4 + Math.random() * 0.3, c });
+  }
 }
 
 function attack() {
@@ -508,7 +395,7 @@ function attack() {
     e.hp -= dmg; e.hurtT = 0.2; e.aggro = true;
     e.kx = (dx / (d || 1)) * 140; e.ky = (dy / (d || 1)) * 140;
     sfx.hit();
-    spark(e.x, e.y - 8, e.type === 'pale' ? '#dfe8ec' : '#8a2a20', crit ? 10 : 5);
+    spark(e.x, e.y, e.type === 'pale' ? '#dfe8ec' : '#8a2a20', crit ? 10 : 5, e.type === 'pale' ? 1.2 : 0.2);
     if (e.hp <= 0) killEnemy(e, true);
   }
 }
@@ -516,7 +403,7 @@ function attack() {
 function killEnemy(e, byPlayer) {
   e.hp = 0;
   if (e.id) S.dead[e.id] = true;
-  spark(e.x, e.y - 8, e.type === 'pale' ? '#e8f0f2' : '#6a4b40', 14);
+  spark(e.x, e.y, e.type === 'pale' ? '#e8f0f2' : '#6a4b40', 14, e.type === 'pale' ? 1.2 : 0.2);
   if (byPlayer || e.type === 'pale') g.xp(e.xp);
   if (e.type === 'pale' && Math.random() < 0.6) g.give('fahlstaub');
   if (e.type === 'rat' && Math.random() < 0.5) g.coins(1 + (Math.random() * 3 | 0));
@@ -629,6 +516,7 @@ function openGate(sound) {
   S.flags.gate_open = true;
   const gc = statics.ground.getContext('2d'), oc = statics.over.getContext('2d');
   for (let x = 26; x <= 28; x++) { map[52 * MAP_W + x] = T.MUD; paintTile(gc, oc, map, x, 52); }
+  R.openGate();
   if (sound) { toast('Das Tor quietscht. Irgendwo dahinter antwortet etwas.'); sfx.bell(); }
 }
 
@@ -653,7 +541,7 @@ function lightLamp(l, item) {
   g.take(item);
   l.lit = true; l.sick = item === 'oel_trueb'; l.timer = l.sick ? 240 : 0;
   sfx.ignite();
-  spark(l.px, l.py - 24, '#f3c46e', 12);
+  spark(l.px, l.py - 4, '#f3c46e', 12, 2.2);
   const key = 'lit_' + l.id;
   if (!S.flags[key]) { S.flags[key] = true; g.xp(10); }
   toast(l.sick ? `${l.name} brennt. Blass und unruhig.` : `${l.name} brennt wieder.`);
@@ -808,11 +696,13 @@ function bark(n, text) {
   setTimeout(() => { el.remove(); barks.splice(barks.indexOf(b), 1); }, 3800);
 }
 
-function positionBarks(cx, cy) {
-  const scale = $('view').clientWidth / VIEW_W;
+function positionBarks() {
+  const v = $('view');
   for (const b of barks) {
-    b.el.style.left = `${(b.n.px - cx) * scale}px`;
-    b.el.style.top = `${(b.n.py - 20 - cy) * (($('view').clientHeight) / VIEW_H)}px`;
+    const p = R.project(b.n.px, b.n.py, 2.1, v.clientWidth, v.clientHeight);
+    b.el.style.left = `${p.x}px`;
+    b.el.style.top = `${p.y}px`;
+    b.el.style.visibility = p.visible ? 'visible' : 'hidden';
   }
 }
 
@@ -880,11 +770,13 @@ function openChar() {
 function openMenu() {
   showOverlay('Menü', `
     <button class="menu-btn" id="m-sound">Ton: ${audioEnabled() ? 'an' : 'aus'}</button>
+    <button class="menu-btn" id="m-gfx">Grafik: ${quality >= 1 ? 'scharf' : quality >= 0.75 ? 'mittel' : 'grob (schnell)'}</button>
     <button class="menu-btn" id="m-save">Spiel speichern</button>
     <button class="menu-btn" id="m-title">Zum Titelbildschirm</button>
-    <p class="prose">Linker Kreis: gehen. Schlag: angreifen (gedrückt halten). Benutzen: sprechen, anzünden, aufheben.
+    <p class="prose">Linker Kreis: gehen. Auf der Spielwelt wischen: Kamera drehen. Schlag: angreifen (gedrückt halten). Benutzen: sprechen, anzünden, aufheben.
 Licht hält die Fahlen fern. Behalte das Öl deiner Laterne im Auge.</p>`);
   $('m-sound').onclick = () => { toggleAudio(); openMenu(); };
+  $('m-gfx').onclick = () => { quality = quality >= 1 ? 0.5 : quality >= 0.75 ? 1 : 0.75; try { localStorage.setItem('letzteslicht.gfx', quality); } catch (e) { /* egal */ } resize(); openMenu(); };
   $('m-save').onclick = () => { save(); toast('Gespeichert.'); closeOverlay(); };
   $('m-title').onclick = () => { save(); closeOverlay(); running = false; paused = true; showTitle(); };
 }
@@ -960,6 +852,7 @@ function startGame(state, intro) {
   $('title').classList.add('hidden');
   resize();
   initWorld(state);
+  R.snapCamera(player.x, player.y);
   running = true;
   if (intro) {
     storyPages('Kaltenbruch', INTRO, 'Aufstehen', () => {
@@ -976,9 +869,10 @@ $('btn-new').onclick = () => {
 };
 $('btn-continue').onclick = () => { const s = loadSaved(); if (s) startGame(s, false); };
 
-let last = performance.now();
+let last = performance.now(), frameDt = 0;
 function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
+  frameDt = dt;
   last = now;
   if (running) {
     if (!paused && !dialog) update(dt);
@@ -994,6 +888,21 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.ser
 
 // Testzugriff
 window.__ll = { get state() { return S; }, get player() { return player; }, get enemies() { return enemies; }, get lamps() { return lamps; }, g, interact, attack, get focus() { return focus; }, get dialog() { return dialog; } };
+
+R.init(canvas, map, statics.ground);
+
+// Kamera drehen: auf der Spielwelt wischen
+let camDrag = null;
+const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
+canvas.addEventListener('pointerdown', (e) => { camDrag = { id: e.pointerId, x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); startAudio(); });
+canvas.addEventListener('pointermove', (e) => {
+  if (!camDrag || e.pointerId !== camDrag.id) return;
+  R.view.yaw -= (e.clientX - camDrag.x) * 0.008;
+  R.view.pitch = Math.max(0.2, Math.min(1.1, R.view.pitch + (e.clientY - camDrag.y) * 0.004));
+  camDrag.x = e.clientX; camDrag.y = e.clientY;
+});
+for (const ev of ['pointerup', 'pointercancel']) canvas.addEventListener(ev, () => { camDrag = null; });
+addEventListener('keydown', (e) => { if (e.key === 'q') R.view.yaw += 0.15; if (e.key === 'r') R.view.yaw -= 0.15; });
 
 showTitle();
 requestAnimationFrame(loop);

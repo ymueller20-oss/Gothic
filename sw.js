@@ -1,7 +1,7 @@
 // Offline-Cache, damit das Spiel nach der Installation ohne Netz läuft.
-const CACHE = 'letzteslicht-v1';
+const CACHE = 'letzteslicht-v2';
 const FILES = ['./', 'index.html', 'style.css', 'manifest.webmanifest', 'icon.svg',
-  'js/main.js', 'js/world.js', 'js/story.js', 'js/audio.js'];
+  'js/main.js', 'js/world.js', 'js/story.js', 'js/audio.js', 'js/render3d.js', 'vendor/three.module.min.js'];
 
 self.addEventListener('install', (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES))));
 self.addEventListener('activate', (e) => e.waitUntil(

@@ -31,19 +31,25 @@ export function hash(x, y, s = 0) {
 
 // ---------------------------------------------------------------- Karte
 
+// Gebäude-Rechtecke für die 3D-Darstellung (werden von buildMap gefüllt)
+export const HOUSES = [];
+export const BLOCKS = [];
+
 export function buildMap() {
+  HOUSES.length = 0; BLOCKS.length = 0;
   const m = new Uint8Array(MAP_W * MAP_H);
   const set = (x, y, t) => { if (x >= 0 && y >= 0 && x < MAP_W && y < MAP_H) m[y * MAP_W + x] = t; };
   const rect = (x, y, w, h, t) => { for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) set(i, j, t); };
 
   // Begehbares Haus: Mauern, Dielenboden, Türlücken
   const house = (x, y, w, h, doors) => {
+    HOUSES.push({ x, y, w, h });
     rect(x, y, w, h, T.WALL);
     rect(x + 1, y + 1, w - 2, h - 2, T.FLOOR);
     for (const [dx, dy] of doors) set(x + dx, y + dy, T.FLOOR);
   };
   // Geschlossenes Haus: Dach mit Fassade
-  const block = (x, y, w, h) => { rect(x, y, w, h - 1, T.ROOF); rect(x, y + h - 1, w, 1, T.WALL); };
+  const block = (x, y, w, h) => { BLOCKS.push({ x, y, w, h }); rect(x, y, w, h - 1, T.ROOF); rect(x, y + h - 1, w, 1, T.WALL); };
 
   rect(0, 0, MAP_W, MAP_H, T.MUD);
   const r = rng(9);
@@ -345,6 +351,16 @@ export function renderStatic(map) {
   const g = ground.getContext('2d'), o = over.getContext('2d');
   for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) paintTile(g, o, map, x, y);
   return { ground, over };
+}
+
+// Einzelne Kacheltextur (für Wände, Dächer und Kisten in 3D)
+export function tileCanvas(t, s = 7) {
+  const c = document.createElement('canvas');
+  c.width = c.height = TILE;
+  const g = c.getContext('2d');
+  const fn = { [T.WALL]: drawWall, [T.ROOF]: drawRoof, [T.TOWER]: drawTower, [T.FLOOR]: drawFloor, [T.PIER]: drawPier, [T.MUD]: drawMud }[t] || drawMud;
+  fn(g, 0, 0, s);
+  return c;
 }
 
 export function paintTile(g, o, map, x, y) {
