@@ -864,10 +864,11 @@ function startGame(state, intro) {
 }
 
 $('btn-new').onclick = () => {
+  if (!worldReady) return;
   if (loadSaved() && !confirm('Den bisherigen Spielstand überschreiben?')) return;
   startGame(newState(), true);
 };
-$('btn-continue').onclick = () => { const s = loadSaved(); if (s) startGame(s, false); };
+$('btn-continue').onclick = () => { if (!worldReady) return; const s = loadSaved(); if (s) startGame(s, false); };
 
 let last = performance.now(), frameDt = 0;
 function loop(now) {
@@ -887,9 +888,17 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && run
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 
 // Testzugriff
-window.__ll = { get state() { return S; }, get player() { return player; }, get enemies() { return enemies; }, get lamps() { return lamps; }, g, interact, attack, get focus() { return focus; }, get dialog() { return dialog; } };
+window.__ll = { get ready() { return worldReady; }, view: R.view, snap: () => R.snapCamera(player.x, player.y), get state() { return S; }, get player() { return player; }, get enemies() { return enemies; }, get lamps() { return lamps; }, g, interact, attack, get focus() { return focus; }, get dialog() { return dialog; } };
 
-R.init(canvas, map, statics.ground);
+// Welt laden, dann erst Start erlauben
+let worldReady = false;
+$('btn-new').disabled = $('btn-continue').disabled = true;
+R.load((f) => { $('loading').textContent = `Lade Welt … ${Math.round(f * 100)} %`; }).then(() => {
+  R.init(canvas, map);
+  worldReady = true;
+  $('loading').textContent = '';
+  $('btn-new').disabled = $('btn-continue').disabled = false;
+});
 
 // Kamera drehen: auf der Spielwelt wischen
 let camDrag = null;

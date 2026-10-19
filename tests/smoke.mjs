@@ -10,7 +10,7 @@ page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 
 await page.goto('http://localhost:8123/index.html');
-await page.waitForTimeout(500);
+await page.waitForFunction(() => window.__ll && __ll.ready, null, { timeout: 120000 });
 await page.screenshot({ path: `${out}/0-title.png` });
 await page.click('#btn-new');
 await page.waitForTimeout(300);

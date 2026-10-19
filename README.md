@@ -1,6 +1,6 @@
 # Letztes Licht
 
-Ein düsteres 2D-Rollenspiel für Android, gebaut fürs Hochformat.
+Ein düsteres 3D-Rollenspiel für Android, gebaut fürs Hochformat.
 Eigene Welt, eigene Geschichte, eigene Figuren.
 
 Kaltenbruch liegt seit neun Jahren im Nebel. Nur Licht hält die Fahlen fern.
@@ -15,7 +15,8 @@ nächtlichen Runde nicht zurückgekehrt.
 - Licht als Spielmechanik: Die Laterne verbraucht Öl. Reines und gestrecktes Öl wirken unterschiedlich. Straßenlampen vertreiben die Fahlen.
 - Kampf, Erfahrung, Stufen, Lernpunkte, Lehrer (Stärke, Geschick)
 - Inventar, Tagebuch, automatisches Speichern
-- Prozedurale Pixelgrafik, Nebel, Regen, dynamisches Licht, Klangkulisse
+- 3D mit Third-Person-Kamera (three.js): echte Texturen und Modelle (Poly Haven, CC0), Fachwerkhäuser, Laternenlicht mit Lichthöfen, Nebel, Regen, Klangkulisse
+- Kamera drehen: auf der Spielwelt wischen. Grafikqualität im Menü umschaltbar
 - Touch-Steuerung im unteren Bildschirmdrittel, die Spielwelt füllt den Rest des Hochformats
 
 ## Auf dem Handy spielen

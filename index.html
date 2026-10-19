@@ -11,6 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
+  <script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
 </head>
 <body>
   <div id="app">
@@ -69,6 +70,7 @@
         <div id="title-btns">
           <button id="btn-continue" class="big hidden">Fortsetzen</button>
           <button id="btn-new" class="big">Neues Spiel</button>
+          <p id="loading" class="tip">Lade Welt …</p>
         </div>
         <p class="tip">Kopfhörer empfohlen.</p>
       </div>
