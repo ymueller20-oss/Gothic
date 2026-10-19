@@ -29,7 +29,7 @@ html, body {
 #game { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
 
 #vignette, #dark, #flash { position: absolute; inset: 0; pointer-events: none; }
-#vignette { background: radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(0,0,0,.7) 100%); }
+#vignette { display: none; }
 #dark { background: #000; opacity: 0; }
 #flash { background: #7a0a05; opacity: 0; }
 
