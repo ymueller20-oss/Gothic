@@ -1,0 +1,14 @@
+{
+  "name": "Letztes Licht",
+  "short_name": "Letztes Licht",
+  "description": "Ein düsteres Rollenspiel in der Nebelstadt Kaltenbruch.",
+  "start_url": ".",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#07080b",
+  "theme_color": "#07080b",
+  "lang": "de",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
