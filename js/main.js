@@ -3,6 +3,7 @@ import * as R from './render3d.js';
 import { PLAYER_NAME, INTRO, ITEMS, NOTEBOOK, QUESTS, LAMPS, GLOWS, OBJECTS, NPCS, ENEMIES, DIALOGS, endingText } from './story.js';
 import { startAudio, sfx, setWhisper, toggleAudio, audioEnabled } from './audio.js';
 
+window.__llBoot = true;
 const SAVE_KEY = 'letzteslicht.save.v1';
 const VIEW_W = 176;
 const $ = (id) => document.getElementById(id);

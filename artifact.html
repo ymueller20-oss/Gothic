@@ -2,7 +2,6 @@
 <style>:root { color-scheme: dark; } html, body { background: #07080b; }</style>
 <link rel="stylesheet" href="style.css">
 <script>window.LL_EMBED = true;</script>
-<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
 
   <div id="app">
     <!-- Spielwelt (oberer Bereich) -->
@@ -69,4 +68,13 @@
     <div id="fade"></div>
   </div>
   
-<script type="module" src="js/main.js"></script>
+<script>
+(function () {
+  function say(t) { var l = document.getElementById('loading'); if (l) l.textContent = t; }
+  window.__llSay = say;
+  window.addEventListener('error', function (e) { say('Fehler: ' + (e.message || 'Skript') + (e.filename ? ' (' + e.filename.split('/').slice(-2).join('/') + ')' : '')); });
+  window.addEventListener('unhandledrejection', function (e) { say('Fehler: ' + (e.reason && e.reason.message || e.reason)); });
+  setTimeout(function () { if (!window.__llBoot) say('Das Spiel startet nicht: Skripte wurden nicht geladen.'); }, 10000);
+})();
+</script>
+<script type="module" src="js/main.js" onerror="window.__llSay && __llSay('Skript js/main.js konnte nicht geladen werden.')"></script>

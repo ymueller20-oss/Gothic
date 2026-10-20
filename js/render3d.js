@@ -1,6 +1,6 @@
 // 3D-Darstellung: echte Texturen (Poly Haven, CC0), Fachwerkhäuser, Modelle, Laternenlicht, Nebel.
 // Spiellogik rechnet in Pixeln (16 pro Kachel); hier gilt 1 Kachel = 1 Einheit.
-import * as THREE from 'three';
+import * as THREE from '../vendor/three.module.min.js';
 import { GLTFLoader } from '../vendor/jsm/GLTFLoader.js';
 import * as SkeletonUtils from '../vendor/utils/SkeletonUtils.js';
 import { MeshoptDecoder } from '../vendor/meshopt_decoder.module.js';
