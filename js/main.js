@@ -865,8 +865,14 @@ function startGame(state, intro) {
 
 $('btn-new').onclick = () => {
   if (!worldReady) return;
-  if (loadSaved() && !confirm('Den bisherigen Spielstand überschreiben?')) return;
-  startGame(newState(), true);
+  // confirm() gibt es im Viewer nicht: zweimal tippen bestätigt
+  if (loadSaved() && !$('btn-new').dataset.sure) {
+    $('btn-new').dataset.sure = '1';
+    $('btn-new').textContent = 'Spielstand löschen?';
+    setTimeout(() => { delete $('btn-new').dataset.sure; $('btn-new').textContent = 'Neues Spiel'; }, 4000);
+    return;
+  }
+  try { startGame(newState(), true); } catch (e) { $('loading').textContent = `Startfehler: ${e.message}`; throw e; }
 };
 $('btn-continue').onclick = () => { if (!worldReady) return; const s = loadSaved(); if (s) startGame(s, false); };
 
@@ -898,7 +904,10 @@ R.load((f) => { $('loading').textContent = `Lade Welt … ${Math.round(f * 100)}
   worldReady = true;
   $('loading').textContent = '';
   $('btn-new').disabled = $('btn-continue').disabled = false;
-});
+}).catch((e) => { $('loading').textContent = `Fehler beim Laden: ${e && e.message ? e.message : e}`; });
+// Fehler sichtbar machen statt stillschweigend nichts zu tun
+addEventListener('error', (e) => { if (!worldReady) $('loading').textContent = `Fehler: ${e.message}`; });
+addEventListener('unhandledrejection', (e) => { if (!worldReady) $('loading').textContent = `Fehler: ${e.reason && e.reason.message || e.reason}`; });
 
 // Kamera drehen: auf der Spielwelt wischen
 let camDrag = null;
