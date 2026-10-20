@@ -45,6 +45,21 @@ const LOOKS = {
 const texs = {};
 const M = {};                 // Materialien
 
+// Modelle kommen normalerweise als .glb-Datei. Wo der Server keine .glb ausliefert (eingebettete Fassung),
+// stehen sie als Base64 in embed/<name>.js.
+function loadGlb(gl, dir, name) {
+  return new Promise(async (res) => {
+    try {
+      if (globalThis.LL_EMBED) {
+        const b64 = (await import(`../embed/${name}.js`)).default;
+        const bin = atob(b64), buf = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+        gl.parse(buf.buffer, '', res, () => res(null));
+      } else gl.load(`assets/${dir}/${name}.glb`, res, undefined, () => res(null));
+    } catch (e) { res(null); }
+  });
+}
+
 export async function load(onProgress) {
   const total = MODEL_LIST.length + TEX_LIST.length + CHAR_LIST.length;
   let done = 0;
@@ -63,14 +78,14 @@ export async function load(onProgress) {
       texs[n] = { map: await loadTex(`assets/tex/${n}_diff.webp`, true), normalMap: await loadTex(`assets/tex/${n}_nor.webp`, false) };
       tick();
     }),
-    ...CHAR_LIST.map((n) => new Promise((res) => gl.load(`assets/chars/${n}.glb`, (g) => {
-      chars[n] = { scene: g.scene, clips: g.animations };
-      tick(); res();
-    }, undefined, () => { tick(); res(); }))),
-    ...MODEL_LIST.map((n) => new Promise((res) => gl.load(`assets/models/${n}.glb`, (g) => {
-      g.scene.traverse((o) => { if (o.isMesh) { o.material.envMapIntensity = 0; } });
-      models[n] = g.scene; tick(); res();
-    }, undefined, () => { tick(); res(); }))),
+    ...CHAR_LIST.map((n) => loadGlb(gl, 'chars', n).then((g) => {
+      if (g) chars[n] = { scene: g.scene, clips: g.animations };
+      tick();
+    })),
+    ...MODEL_LIST.map((n) => loadGlb(gl, 'models', n).then((g) => {
+      if (g) { g.scene.traverse((o) => { if (o.isMesh) o.material.envMapIntensity = 0; }); models[n] = g.scene; }
+      tick();
+    })),
   ]);
 }
 

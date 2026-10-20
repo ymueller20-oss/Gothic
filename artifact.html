@@ -1,0 +1,72 @@
+<title>Letztes Licht</title>
+<style>:root { color-scheme: dark; } html, body { background: #07080b; }</style>
+<link rel="stylesheet" href="style.css">
+<script>window.LL_EMBED = true;</script>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+
+  <div id="app">
+    <!-- Spielwelt (oberer Bereich) -->
+    <div id="view">
+      <canvas id="game"></canvas>
+      <div id="vignette"></div>
+      <div id="dark"></div>
+      <div id="flash"></div>
+      <div id="topbar">
+        <div id="bars">
+          <div class="bar"><div id="hpfill" class="fill hp"></div><span id="hptext"></span></div>
+          <div class="bar"><div id="oilfill" class="fill oil"></div><span id="oiltext"></span></div>
+        </div>
+        <div id="topbtns">
+          <button id="btn-log" class="ico" aria-label="Tagebuch">✒</button>
+          <button id="btn-inv" class="ico" aria-label="Inventar">⚱</button>
+          <button id="btn-char" class="ico" aria-label="Charakter">☗</button>
+          <button id="btn-menu" class="ico" aria-label="Menü">☰</button>
+        </div>
+      </div>
+      <div id="toast"></div>
+      <div id="barks"></div>
+    </div>
+
+    <!-- Bedienfeld (unterer Bereich, nutzt das Hochformat) -->
+    <div id="panel">
+      <div id="hint"></div>
+      <div id="controls">
+        <div id="stick"><div id="knob"></div></div>
+        <div id="actions">
+          <button id="btn-use" class="act">Benutzen</button>
+          <button id="btn-hit" class="act hit">Schlag</button>
+        </div>
+      </div>
+      <div id="dialog" class="hidden">
+        <div id="dlg-name"></div>
+        <div id="dlg-text"></div>
+        <div id="dlg-choices"></div>
+      </div>
+    </div>
+
+    <!-- Overlays -->
+    <div id="overlay" class="hidden">
+      <div id="ov-box">
+        <div id="ov-head"><h2 id="ov-title"></h2><button id="ov-close" class="ico">✕</button></div>
+        <div id="ov-body"></div>
+      </div>
+    </div>
+
+    <div id="title">
+      <canvas id="title-fx"></canvas>
+      <div id="title-inner">
+        <h1>Letztes&nbsp;Licht</h1>
+        <p class="sub">Kaltenbruch, im neunten Jahr der Dämmerung</p>
+        <div id="title-btns">
+          <button id="btn-continue" class="big hidden">Fortsetzen</button>
+          <button id="btn-new" class="big">Neues Spiel</button>
+          <p id="loading" class="tip">Lade Welt …</p>
+        </div>
+        <p class="tip">Kopfhörer empfohlen.</p>
+      </div>
+    </div>
+
+    <div id="fade"></div>
+  </div>
+  
+<script type="module" src="js/main.js"></script>
