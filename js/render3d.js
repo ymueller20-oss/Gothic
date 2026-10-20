@@ -2,6 +2,7 @@
 // Spiellogik rechnet in Pixeln (16 pro Kachel); hier gilt 1 Kachel = 1 Einheit.
 import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/jsm/GLTFLoader.js';
+import * as SkeletonUtils from '../vendor/utils/SkeletonUtils.js';
 import { MeshoptDecoder } from '../vendor/meshopt_decoder.module.js';
 import { TILE, MAP_W, MAP_H, T, HOUSES, BLOCKS, tileAt, hash, makeFog } from './world.js';
 
@@ -16,6 +17,7 @@ const roofs = [];             // { group, r }
 const lampFx = new Map();     // id -> { core, halo }
 const actors = new Map();     // Spielobjekt -> Modell
 const models = {};            // Name -> geladene Szene
+const chars = {};             // Figurenmodell -> { scene, clips }
 export const view = { yaw: 0.0, dist: 3.6, pitch: 0.36 };
 
 // ------------------------------------------------------------ Laden
@@ -29,11 +31,22 @@ const TEX_LIST = ['mossy_cobblestone', 'muddy_tracks', 'mud_forest', 'weathered_
   'thatch_roof_angled', 'roof_slates_02', 'castle_wall_slates', 'old_wood_floor', 'rock_wall_08', 'medieval_wall_01',
   'forest_leaves_02', 'bark_brown_02'];
 
+const CHAR_LIST = ['Warrior', 'Monk', 'Cleric', 'Ranger', 'Rogue', 'Wizard'];
+const CHAR_H = 1.55;          // Zielhöhe der Figuren in Einheiten
+const FACE = 0;               // Drehkorrektur, falls das Modell nicht nach +Z schaut
+
+// Figurenmodell und Farbstich je Figur
+const LOOKS = {
+  player: ['Rogue', 0xa8927c], hedda: ['Ranger', 0xd2b8a0], kassian: ['Wizard', 0x80869a], lene: ['Ranger', 0x93a69c],
+  reutter: ['Warrior', 0xb4a490], fink: ['Monk', 0x8c8068], zaehler: ['Wizard', 0xa59e90], ulm: ['Monk', 0x7e8a94],
+  borg: ['Warrior', 0x9e8e7c], ohm: ['Cleric', 0xbcc4c6], ambros: ['Wizard', 0xb59e7a],
+};
+
 const texs = {};
 const M = {};                 // Materialien
 
 export async function load(onProgress) {
-  const total = MODEL_LIST.length + TEX_LIST.length;
+  const total = MODEL_LIST.length + TEX_LIST.length + CHAR_LIST.length;
   let done = 0;
   const tick = () => onProgress && onProgress(++done / total);
   const tl = new THREE.TextureLoader();
@@ -50,6 +63,10 @@ export async function load(onProgress) {
       texs[n] = { map: await loadTex(`assets/tex/${n}_diff.webp`, true), normalMap: await loadTex(`assets/tex/${n}_nor.webp`, false) };
       tick();
     }),
+    ...CHAR_LIST.map((n) => new Promise((res) => gl.load(`assets/chars/${n}.glb`, (g) => {
+      chars[n] = { scene: g.scene, clips: g.animations };
+      tick(); res();
+    }, undefined, () => { tick(); res(); }))),
     ...MODEL_LIST.map((n) => new Promise((res) => gl.load(`assets/models/${n}.glb`, (g) => {
       g.scene.traverse((o) => { if (o.isMesh) { o.material.envMapIntensity = 0; } });
       models[n] = g.scene; tick(); res();
@@ -173,11 +190,11 @@ export function init(canvas, worldMap) {
   map = worldMap;
   renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.7;
+  renderer.toneMappingExposure = 2.6;
   renderer.setClearColor(0x080b0f);
   scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0x12150f, 0.07);
-  scene.background = new THREE.Color(0x12150f);
+  scene.fog = new THREE.FogExp2(0x1a1d16, 0.055);
+  scene.background = new THREE.Color(0x1a1d16);
   camera = new THREE.PerspectiveCamera(72, 1, 0.1, 90);
 
   for (const [k, n] of [['cobble', 'mossy_cobblestone'], ['mud', 'mud_forest'], ['tracks', 'muddy_tracks'], ['planks', 'weathered_planks'],
@@ -190,7 +207,7 @@ export function init(canvas, worldMap) {
   M.windowLit = new THREE.MeshBasicMaterial({ color: 0xffa24a });
   M.windowDark = new THREE.MeshStandardMaterial({ color: 0x0c0d10, roughness: 0.3 });
 
-  scene.add(new THREE.HemisphereLight(0x4a5866, 0x1c1810, 1.1));
+  scene.add(new THREE.HemisphereLight(0x5a6676, 0x2c2418, 1.8));
   const moon = new THREE.DirectionalLight(0x8090b0, 0.35);
   moon.position.set(-20, 30, 10);
   scene.add(moon);
@@ -666,6 +683,70 @@ function shadow(size) {
   return m;
 }
 
+// ------------------------------------------------------------ Echte Figurenmodelle (Quaternius, CC0)
+
+function findBone(root, name) { let b = null; root.traverse((o) => { if (o.name === name) b = o; }); return b; }
+
+function makeChar(key, opts = {}) {
+  const [model, tint] = LOOKS[key] || LOOKS.player;
+  const src = chars[model];
+  if (!src) return null;
+  const obj = SkeletonUtils.clone(src.scene);
+  // Höhe normieren
+  const box = new THREE.Box3().setFromObject(obj);
+  const k = CHAR_H / (box.max.y - box.min.y);
+  obj.scale.setScalar(k);
+  obj.position.y = -box.min.y * k;
+  obj.rotation.y = FACE;
+  const tintC = new THREE.Color(tint);
+  obj.traverse((o) => {
+    if (!o.isMesh) return;
+    o.frustumCulled = false;
+    const old = o.material;
+    o.material = new THREE.MeshStandardMaterial({ map: old.map, color: old.color.clone().multiply(tintC).multiplyScalar(1.9), roughness: 1, metalness: 0, flatShading: true, emissive: new THREE.Color(0x4a3c2e) });
+    if (old.normalMap) o.material.normalMap = old.normalMap;
+    if (opts.ghost) {
+      Object.assign(o.material, { transparent: true, opacity: 0.6, depthWrite: false, emissive: new THREE.Color(0x56666e) });
+      o.material.map = null; o.material.color.setHex(0xaab8c0);
+    }
+    o.material.needsUpdate = true;
+  });
+  const root = new THREE.Group();
+  root.add(obj, shadow(0.9));
+  const mixer = new THREE.AnimationMixer(obj);
+  const act = {};
+  const find = (...names) => { for (const n of names) { const c = src.clips.find((x) => x.name === n); if (c) return c; } return null; };
+  const defs = { idle: find('Idle'), walk: find('Walk'), run: find('Run'), hit: find('RecieveHit'),
+    attack: find('Sword_Attack', 'Dagger_Attack', 'Staff_Attack', 'Attack', 'Punch') };
+  for (const [n, c] of Object.entries(defs)) if (c) act[n] = mixer.clipAction(c);
+  if (act.attack) { act.attack.setLoop(THREE.LoopOnce, 1); act.attack.clampWhenFinished = true; }
+  act.idle && act.idle.play();
+  root.userData = { mixer, act, cur: 'idle', char: true, mat: null };
+  if (opts.ghost) { root.userData.ghost = true; root.userData.matList = []; obj.traverse((o) => o.isMesh && root.userData.matList.push(o.material)); }
+  if (opts.lantern) {
+    const hand = findBone(obj, 'Fist.L');
+    if (hand) {
+      const lg = prop('wooden_lantern_01', 0.2 / k);
+      lg.position.set(0, 0, 0); lg.rotation.set(0, 0, 0);
+      hand.add(lg);
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex(), color: 0xffb060, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
+      glow.scale.set(0.6 / k, 0.6 / k, 1); glow.position.y = 0.1 / k; hand.add(glow);
+      root.userData.glow = glow;
+    }
+  }
+  if (!root.userData.glow) root.userData.glow = { visible: true };
+  return root;
+}
+
+function setAnim(a, name, speed = 1) {
+  const u = a.userData;
+  if (u.cur === name || !u.act[name]) { if (u.act[u.cur]) u.act[u.cur].timeScale = speed; return; }
+  const to = u.act[name], from = u.act[u.cur];
+  to.reset().setEffectiveTimeScale(speed).play();
+  from && from.crossFadeTo(to, 0.18, false);
+  u.cur = name;
+}
+
 // Kantige Flächen statt glatter Rundungen
 const cloth = (color) => new THREE.MeshStandardMaterial({ color, roughness: 0.95, flatShading: true });
 
@@ -823,8 +904,8 @@ void main() {
   // Kanten: Sprünge in der Tiefe werden zu dunklen, rauen Linien
   float d0 = D(vec2(0.0));
   float e = abs(D(vec2(1.0, 0.0)) - d0) + abs(D(vec2(-1.0, 0.0)) - d0) + abs(D(vec2(0.0, 1.0)) - d0) + abs(D(vec2(0.0, -1.0)) - d0);
-  float edge = smoothstep(0.06, 0.35, e / max(d0, 0.5) * 6.0) * (1.0 - smoothstep(14.0, 30.0, d0));
-  c *= 1.0 - edge * 0.55;
+  float edge = smoothstep(0.35, 0.9, e / max(d0, 0.5) * 6.0) * (1.0 - smoothstep(14.0, 30.0, d0));
+  c *= 1.0 - edge * 0.4;
   // Farbe: entsättigt, in Richtung Moder und Lehm
   float l = dot(c, vec3(0.299, 0.587, 0.114));
   c = mix(vec3(l), c, 0.55);
@@ -879,9 +960,9 @@ export function resize(w, h, quality) {
 function actorFor(obj, kind) {
   let a = actors.get(obj);
   if (!a) {
-    if (kind === 'pale') a = makePale();
+    if (kind === 'pale') a = makeChar('ohm', { ghost: true }) || makePale();
     else if (kind === 'rat') a = makeRat();
-    else a = makeHuman(obj.look, kind === 'player' ? { lantern: true, weapon: true } : {});
+    else a = makeChar(kind === 'player' ? 'player' : obj.id, { lantern: kind === 'player' }) || makeHuman(obj.look, kind === 'player' ? { lantern: true, weapon: true } : {});
     scene.add(a);
     actors.set(obj, a);
   }
@@ -949,7 +1030,13 @@ export function render(w) {
   const pa = actorFor(player, 'player');
   pa.position.set(tx, 0, ty);
   pa.rotation.y = Math.atan2(player.fx, player.fy);
-  animateHuman(pa, player.moving, player.phase, player.atkT, time);
+  if (pa.userData.char) {
+    const u = pa.userData;
+    if (player.atkT > 0 && time > (u.atkUntil || 0)) { u.atkUntil = time + 0.5; u.act.attack && u.act.attack.reset(); }
+    if (time < (u.atkUntil || 0) && u.act.attack) setAnim(pa, 'attack', 1.4);
+    else setAnim(pa, player.moving ? 'walk' : 'idle', player.moving ? 1.1 : 1);
+    u.mixer.update(dt);
+  } else animateHuman(pa, player.moving, player.phase, player.atkT, time);
   pa.userData.glow.visible = S.player.oil > 0;
 
   for (const n of w.npcs) {
@@ -959,8 +1046,8 @@ export function render(w) {
     a.position.set(U(n.px), 0, U(n.py) - 0.2);
     const ang = { down: 0, up: Math.PI, left: -Math.PI / 2, right: Math.PI / 2 }[n.dir] ?? 0;
     a.rotation.y += angleTo(a.rotation.y, ang) * Math.min(1, dt * 5);
-    animateHuman(a, false, 0, 0, time + n.x);
-    a.userData.parts.head.rotation.y = Math.sin(time * 0.5 + n.x) * 0.25;
+    if (a.userData.char) { if (Math.hypot(U(n.px) - tx, U(n.py) - ty) < 22) a.userData.mixer.update(dt); }
+    else { animateHuman(a, false, 0, 0, time + n.x); a.userData.parts.head.rotation.y = Math.sin(time * 0.5 + n.x) * 0.25; }
     if (n.fading !== undefined) a.traverse((o) => { if (o.material) { o.material.transparent = true; o.material.opacity = n.fading; } });
   }
 
@@ -969,7 +1056,13 @@ export function render(w) {
     a.position.set(U(e.x), 0, U(e.y));
     a.rotation.y = Math.atan2(player.x - e.x, player.y - e.y);
     a.visible = !(e.hurtT > 0 && Math.floor(time * 30) % 2);
-    if (e.type === 'pale') {
+    if (e.type === 'pale' && a.userData.char) {
+      a.position.y = 0.1 + Math.sin(time * 2 + e.homeX) * 0.06;
+      const op = 0.6 * (e.spawnA ?? 1) * (0.85 + Math.sin(time * 7 + e.homeY) * 0.12);
+      for (const m of a.userData.matList) m.opacity = op;
+      setAnim(a, e.aggro ? 'run' : 'walk', e.aggro ? 0.6 : 0.5);
+      a.userData.mixer.update(dt);
+    } else if (e.type === 'pale') {
       a.position.y = 0.12 + Math.sin(time * 2 + e.homeX) * 0.08;
       a.userData.mat.opacity = 0.6 * (e.spawnA ?? 1) * (0.85 + Math.sin(time * 7 + e.homeY) * 0.12);
       const p = a.userData.parts;
@@ -1012,7 +1105,7 @@ export function render(w) {
     towerGlow.material.opacity = ek === 'pure' ? 0.8 : 0.35 + Math.sin(time * 11) * 0.1;
   }
 
-  scene.fog.density = indoor ? 0.04 : 0.07;
+  scene.fog.density = indoor ? 0.035 : 0.055;
   const rx = Math.round(tx), rz = Math.round(ty);
   mistA.position.set(rx, 0.3, rz); mistB.position.set(rx, 1.2, rz);
   mistA.material.map.offset.set(time * 0.006 + rx / 8.8, time * 0.002 + rz / 8.8);

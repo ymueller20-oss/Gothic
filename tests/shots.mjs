@@ -4,7 +4,7 @@ const out = process.argv[2] || 'tests/shots';
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const page = await browser.newPage({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
 const errors = [];
-page.on('pageerror', (e) => errors.push(e.message));
+page.on('pageerror', (e) => errors.push(e.message + ' ' + (e.stack || '').split('\n').slice(0, 4).join(' | ')));
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errors.push(m.type() + ': ' + m.text()); });
 await page.addInitScript((q) => { try { localStorage.setItem('letzteslicht.gfx', q); } catch (e) { /* egal */ } }, process.env.Q || '1');
 await page.goto('http://localhost:8123/index.html');
