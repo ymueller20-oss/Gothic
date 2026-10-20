@@ -203,7 +203,12 @@ function norm(v) { const l = Math.hypot(...v); return v.map((a) => a / l); }
 
 export function init(canvas, worldMap) {
   map = worldMap;
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+  // Verschiedene Kontext-Einstellungen durchprobieren, bevor aufgegeben wird
+  let lastErr = null;
+  for (const attrs of [{ antialias: false, powerPreference: 'high-performance' }, { antialias: false }, { antialias: false, alpha: true, stencil: false, depth: true, failIfMajorPerformanceCaveat: false }]) {
+    try { renderer = new THREE.WebGLRenderer({ canvas, ...attrs }); break; } catch (e) { lastErr = e; }
+  }
+  if (!renderer) throw new Error('Dein Browser stellt kein WebGL bereit (3D-Grafik). Aktiviere die Hardwarebeschleunigung oder öffne das Spiel in Chrome auf dem Handy.');
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 2.6;
   renderer.setClearColor(0x080b0f);
